@@ -1,0 +1,67 @@
+/*  Batch EPS/AI/PDF ➜ After‑Effects‑ready AI (layer per object)
+    ----------------------------------------------------------------
+    • Prompts for a folder.
+    • Converts every EPS, AI, or PDF in that folder (no subfolders).
+    • For each file:
+        – opens it,
+        – creates a new Illustrator layer for every top‑level pageItem,
+        – saves a copy named  <original>_AE.ai  (PDF‑compatible) next to it,
+        – closes without altering the source.
+    • Resulting _AE.ai files import into After Effects using
+      File ▸ Import ▸ Composition – Retain Layer Sizes.
+*/
+
+#target illustrator
+
+function processFile(fileObj) {
+    try {
+        var doc = app.open(fileObj);
+        var base = doc.name.replace(/\.(eps|ai|pdf)$/i, "");
+        var mainLayer = doc.layers[0];
+
+        // Create separate Illustrator layers per pageItem (iterate backwards)
+        for (var i = mainLayer.pageItems.length - 1; i >= 0; i--) {
+            var item = mainLayer.pageItems[i];
+            var lyr  = doc.layers.add();
+            lyr.name = (item.name && item.name !== "") ? item.name : ("Layer_" + (i+1));
+            item.move(lyr, ElementPlacement.PLACEATBEGINNING);
+        }
+        if (mainLayer.pageItems.length === 0) mainLayer.remove();
+
+        var dest = File(fileObj.path + "/" + base + "_AE.ai");
+        var opts = new IllustratorSaveOptions();
+        opts.compatibility   = Compatibility.ILLUSTRATOR17; // change if needed
+        opts.pdfCompatible   = true;
+        opts.embedICCProfile = false;
+        opts.compressed      = true;
+        doc.saveAs(dest, opts);
+        doc.close(SaveOptions.DONOTSAVECHANGES);
+        return true;
+
+    } catch (e) {
+        // If something goes wrong, close doc (if open) and report
+        try { doc.close(SaveOptions.DONOTSAVECHANGES); } catch(err) {}
+        return false;
+    }
+}
+
+function main() {
+    app.userInteractionLevel = UserInteractionLevel.DONTDISPLAYALERTS;
+    var srcFolder = Folder.selectDialog("Choose folder containing EPS/AI/PDF files");
+    if (!srcFolder) { alert("No folder selected – cancelled."); return; }
+
+    var files = srcFolder.getFiles(function(f) {
+        return f instanceof File && f.name.match(/\.(eps|ai|pdf)$/i);
+    });
+    if (files.length === 0) { alert("No EPS/AI/PDF files found in that folder."); return; }
+
+    var success = 0, fail = 0;
+    for (var i = 0; i < files.length; i++) {
+        if (processFile(files[i])) success++; else fail++;
+    }
+
+    alert("Batch complete!\nConverted: " + success + "\nFailed: " + fail +
+          "\n\nImport the '_AE.ai' files into After Effects as a composition.");
+}
+
+main();
